@@ -13,17 +13,8 @@ export class Asset {
   public ID: string;
 
   @Property()
-  public Color: string;
+  public isLocked: boolean;
 
   @Property()
-  public Size: number;
-
-  @Property()
-  public Owner: string;
-
-  @Property()
-  public AppraisedValue: number;
-
-  @Property()
-  public CreationTs: string;
+  public size: number;
 }

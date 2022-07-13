@@ -17,6 +17,7 @@ import {
   Logger,
   LoggerProvider,
   LogLevelDesc,
+  Secp256k1Keys,
 } from "@hyperledger/cactus-common";
 
 import { ICactusApiServerOptions } from "@hyperledger/cactus-cmd-api-server";
@@ -30,8 +31,11 @@ import {
   FabricSigningCredential,
   FabricContractInvocationType,
 } from "@hyperledger/cactus-plugin-ledger-connector-fabric";
+import { Utils } from "./utils";
+import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescript/secp256k1-keys";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
+  bungeeKeys: ISignerKeyPair
   instanceId: string;
   
   fabricPath?: string;
@@ -41,6 +45,8 @@ export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   // fabricPlugin?: PluginLedgerConnectorFabric;
   fabricAssetID?: string;
   fabricAssetSize?: string;
+  fabricConfig?: Configuration;
+  fabricApi?: FabricApi;
 
   logLevel?: LogLevelDesc;
   keychainId?: string;
@@ -52,7 +58,12 @@ export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
 
 export class PluginBUNGEE {
   // private readonly ledgerConnector: any;
-  
+  private keyPairBungee: Secp256k1Keys;
+  private privKeyBungee: string;
+  private pubKeyBungee: string;
+
+  private ledgerSnapshot: string[]
+
   public fabricApi?: FabricApi;
   public fabricSigningCredential?: FabricSigningCredential;
   public fabricChannelName?: string;
@@ -65,21 +76,26 @@ export class PluginBUNGEE {
   private level: LogLevelDesc;
   private logger: Logger;
   public pluginRegistry: PluginRegistry;
-  // ledgerConnector: PluginLedgerConnectorFabric
   constructor(public readonly options: IPluginBUNGEEOptions) {
-    // this.ledgerConnector = ledgerConnector;
+    this.keyPairBungee = options.bungeeKeys;
     this.instanceId = uuidv4();
+
     this.className = "pluginBUNGEE";
     this.level = options.logLevel || "INFO";
     const label = this.getClassName();
     const level = this.level;
     this.logger = LoggerProvider.getOrCreate({ label, level });
+
+    this.privKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.privateKey);
+    this.pubKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.publicKey);
+
     this.pluginRegistry = new PluginRegistry();
+    this.fabricApi = options.fabricApi;
+
+    this.ledgerSnapshot = [];
 
     if (options.fabricPath != undefined) this.defineFabricConnection(options);
   }
-
-  public initConnector(): void {}
 
   public getInstanceId(): string {
     return this.instanceId;
@@ -96,25 +112,105 @@ export class PluginBUNGEE {
   public async onPluginInit(): Promise<unknown> {
     return;
   }
+
+  public generateSnapshot(): void {
+    this.ledgerSnapshot = [];
+    this.logger.info(this.ledgerSnapshot);
+  }
   
   //Connect to fabric, retrive blocks
-  public getBlocks(): void {
+  async getBlocks(): Promise<string> {
     // this.ledgerConnector.getTransactionReceiptByTxID();
     // this.fabricApi?.deployContractGoSourceV1
-    this.logger.warn(`Called getBlocks()`);
+    this.logger.info(`Called getBlocks()`);
+    // const fnTag = `${this.className}#lockFabricAsset()`;
+
+    // let fabricLockAssetProof = "";
+
+    // const txId = await this.fabricLookAsset();
+     
+    // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: ${fabricLockAssetProof}`);
+    // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: `);
+
+    const allAssets = await this.getAllAssets();
+    
+    this.logger.info(`BLOCKS: ----- ${allAssets}`);
+    
+    // fabricLockAssetProof = await this.fabricGetTxReceiptByTxIDV1(txId);
+
+    // this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
+    
+    return "";
+    // return fabricLockAssetProof;
   }
+
+  async fabricLookAsset(): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "LockAsset",
+      invocationType: FabricContractInvocationType.Send,
+      params: [this.fabricAssetID],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      return response.data.transactionId;
+    }
+
+    return "response undefined";
+  }
+  
+  async fabricGetTxReceiptByTxIDV1(transactionId: string): Promise<string> {
+    const receiptLockRes = await this.fabricApi?.getTransactionReceiptByTxIDV1(
+      {
+        signingCredential: this.fabricSigningCredential,
+        channelName: this.fabricChannelName,
+        contractName: "qscc",
+        invocationType: FabricContractInvocationType.Call,
+        methodName: "GetBlockByTxID",
+        // params: [this.fabricChannelName, this.fabricAssetID],
+        params: [this.fabricChannelName, transactionId],
+      } as FabricRunTransactionRequest,
+    );
+    const headerPlusData = JSON.stringify(receiptLockRes?.headers) +"\nHeader---------data\n" + JSON.stringify(receiptLockRes?.data); 
+    return JSON.stringify(headerPlusData);
+    // return JSON.stringify(receiptLockRes?.data);
+  }
+
+  async getAllAssets(): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllAssets",
+      invocationType: FabricContractInvocationType.Call,
+      params: [],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      return response.data.functionOutput;
+    }
+
+    return "response undefined";
+  }
+  
   
   public generateView(): void {
     this.getBlocks();
-    this.logger.warn(`Called generateView()`);
+    this.logger.info(`Called generateView()`);
   }
   
   //Must be atomic
   public saveViews(): void {
-    this.logger.warn(`Called saveViews()`);
+    this.logger.info(`Called saveViews()`);
   }
-
+  
   private defineFabricConnection(options: IPluginBUNGEEOptions): void {
+    
+    this.logger.info(`OPTIONS:: ${options}`);
     const fnTag = `${this.className}#defineFabricConnection()`;
 
     const config = new Configuration({ basePath: options.fabricPath });
@@ -139,38 +235,38 @@ export class PluginBUNGEE {
       : "1";
   }
 
-  async lockFabricAsset(): Promise<string> {
-    const fnTag = `${this.className}#lockFabricAsset()`;
+  // async lockFabricAsset(): Promise<string> {
+  //   const fnTag = `${this.className}#lockFabricAsset()`;
 
-    let fabricLockAssetProof = "";
+  //   let fabricLockAssetProof = "";
 
-    if (this.fabricApi != undefined) {
-      const response = await this.fabricApi.runTransactionV1({
-        signingCredential: this.fabricSigningCredential,
-        channelName: this.fabricChannelName,
-        contractName: this.fabricContractName,
-        invocationType: FabricContractInvocationType.Send,
-        methodName: "LockAsset",
-        params: [this.fabricAssetID],
-      } as FabricRunTransactionRequest);
+  //   if (this.fabricApi != undefined) {
+  //     const response = await this.fabricApi.runTransactionV1({
+  //       signingCredential: this.fabricSigningCredential,
+  //       channelName: this.fabricChannelName,
+  //       contractName: this.fabricContractName,
+  //       invocationType: FabricContractInvocationType.Send,
+  //       methodName: "LockAsset",
+  //       params: [this.fabricAssetID],
+  //     } as FabricRunTransactionRequest);
 
-      const receiptLockRes = await this.fabricApi.getTransactionReceiptByTxIDV1(
-        {
-          signingCredential: this.fabricSigningCredential,
-          channelName: this.fabricChannelName,
-          contractName: "qscc",
-          invocationType: FabricContractInvocationType.Call,
-          methodName: "GetBlockByTxID",
-          params: [this.fabricChannelName, response.data.transactionId],
-        } as FabricRunTransactionRequest,
-      );
+  //     const receiptLockRes = await this.fabricApi.getTransactionReceiptByTxIDV1(
+  //       {
+  //         signingCredential: this.fabricSigningCredential,
+  //         channelName: this.fabricChannelName,
+  //         contractName: "qscc",
+  //         invocationType: FabricContractInvocationType.Call,
+  //         methodName: "GetBlockByTxID",
+  //         params: [this.fabricChannelName, response.data.transactionId],
+  //       } as FabricRunTransactionRequest,
+  //     );
 
-      this.logger.warn(receiptLockRes.data);
-      fabricLockAssetProof = JSON.stringify(receiptLockRes.data);
-    }
+  //     this.logger.warn(receiptLockRes.data);
+  //     fabricLockAssetProof = JSON.stringify(receiptLockRes.data);
+  //   }
 
-    this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
+  //   this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
 
-    return fabricLockAssetProof;
-  }
+  //   return fabricLockAssetProof;
+  // }
 }

@@ -13,17 +13,5 @@ export class Asset {
   public ID: string;
 
   @Property()
-  public Color: string;
-
-  @Property()
-  public Size: number;
-
-  @Property()
-  public Owner: string;
-
-  @Property()
-  public AppraisedValue: number;
-
-  @Property()
-  public CreationTs: string;
+  public Value: number;
 }

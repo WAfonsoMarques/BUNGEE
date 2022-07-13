@@ -20,62 +20,32 @@ export class AssetTransferContract extends Contract {
   public async InitLedger(ctx: Context): Promise<void> {
     const assets: Asset[] = [
       {
-        ID: "asset87",
-        Color: "blue",
-        Size: 5,
-        Owner: "Tom",
-        AppraisedValue: 300,
-        CreationTs: Date(),
+        ID: "asset1",
+        Value: 1,
       },
       {
         ID: "asset2",
-        Color: "red",
-        Size: 5,
-        Owner: "Brad",
-        AppraisedValue: 400,
-        CreationTs: Date(),
+        Value: 2,
       },
       {
         ID: "asset3",
-        Color: "green",
-        Size: 10,
-        Owner: "Jin Soo",
-        AppraisedValue: 500,
-        CreationTs: Date(),
+        Value: 3,
       },
       {
         ID: "asset4",
-        Color: "yellow",
-        Size: 10,
-        Owner: "Max",
-        AppraisedValue: 600,
-        CreationTs: Date(),
+        Value: 4,
       },
       {
         ID: "asset5",
-        Color: "black",
-        Size: 15,
-        Owner: "Adriana",
-        AppraisedValue: 700,
-        CreationTs: Date(),
+        Value: 5,
       },
       {
         ID: "asset6",
-        Color: "white",
-        Size: 15,
-        Owner: "Michel",
-        AppraisedValue: 800,
-        CreationTs: Date(),
+        Value: 6,
       },
     ];
 
-    // for (const asset of assets) {
-    //   asset.docType = "asset";
-    //   await ctx.stub.putState(asset.ID, Buffer.from(JSON.stringify(asset)));
-    //   console.info(`Asset ${asset.ID} initialized`);
-    // }
-    for (let i = 0; i < 6; i++) {
-      const asset = assets[i];
+    for (const asset of assets) {
       asset.docType = "asset";
       await ctx.stub.putState(asset.ID, Buffer.from(JSON.stringify(asset)));
       console.info(`Asset ${asset.ID} initialized`);
@@ -87,19 +57,11 @@ export class AssetTransferContract extends Contract {
   public async CreateAsset(
     ctx: Context,
     id: string,
-    color: string,
-    size: number,
-    owner: string,
-    appraisedValue: number,
-    creationTs: Date,
+    value: number,
   ): Promise<void> {
     const asset = {
       ID: id,
-      Color: color,
-      Size: size,
-      Owner: owner,
-      AppraisedValue: appraisedValue,
-      CreationTs: creationTs,
+      Value: value,
     };
     await ctx.stub.putState(id, Buffer.from(JSON.stringify(asset)));
   }

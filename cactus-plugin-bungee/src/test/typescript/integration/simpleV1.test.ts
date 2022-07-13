@@ -14,6 +14,7 @@ import {
   IListenOptions,
   LoggerProvider,
   LogLevelDesc,
+  Secp256k1Keys,
   Servers,
 } from "@hyperledger/cactus-common";
 import { Configuration } from "@hyperledger/cactus-core-api";
@@ -42,11 +43,14 @@ import {
   PluginBUNGEE,
 } from "../../../main/typescript/plugin-bungee";
 
+// import { Secp256k1Keys } from "@hyperledger/cactus-common";
+// import { config } from "process";
+
 const logLevel: LogLevelDesc = "TRACE";
 
 const log = LoggerProvider.getOrCreate({
   level: "INFO",
-  label: "odapTestWithLedgerConnectors",
+  label: "pluginBUNGEE",
 });
 
 let fabricLedger: FabricTestLedgerV1;
@@ -57,10 +61,11 @@ let fabricConnector: PluginLedgerConnectorFabric;
 let fabricServer: Server;
 let fabricSigningCredential: FabricSigningCredential;
 const FABRIC_ASSET_ID = uuidv4();
+let configFabric: Configuration;
+let apiClient: FabricApi;
 
 let pluginBungeeOptions: IPluginBUNGEEOptions;
 let pluginBungee: PluginBUNGEE;
-
 beforeAll(async () => {
   pruneDockerAllIfGithubAction({ logLevel })
     .then(() => {
@@ -187,13 +192,13 @@ beforeAll(async () => {
 
     const apiUrl = `http://${address}:${port}`;
     fabricPath = apiUrl;
-    const config = new Configuration({ basePath: apiUrl });
+    configFabric = new Configuration({ basePath: apiUrl });
 
-    const apiClient = new FabricApi(config);
+    apiClient = new FabricApi(configFabric);
 
     fabricContractName = "basic-asset-transfer-2";
     const contractRelPath =
-      "../fabric-contracts/lock-asset/chaincode-typescript";
+      "../fabric-contracts/simple-asset/chaincode-typescript";
     const contractDir = path.join(__dirname, contractRelPath);
 
     // ├── package.json
@@ -330,12 +335,23 @@ beforeAll(async () => {
     const createResponse = await apiClient.runTransactionV1({
       contractName: fabricContractName,
       channelName: fabricChannelName,
-      params: [FABRIC_ASSET_ID, "19"],
+      params: ["CAR1", "10"],
       // params: [assetId, "Green", "19", assetOwner, "9999"],
       methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
     });
+
+    // const createResponse = await apiClient.runTransactionV1({
+    //   contractName: fabricContractName,
+    //   channelName: fabricChannelName,
+    //   //params: [],
+    //   params: [FABRIC_ASSET_ID, "19"],
+    //   // params: [assetId, "Green", "19", assetOwner, "9999"],
+    //   methodName: "CreateAsset",
+    //   invocationType: FabricContractInvocationType.Send,
+    //   signingCredential: fabricSigningCredential,
+    // });
 
     expect(createResponse).not.toBeUndefined();
     expect(createResponse.status).toBeGreaterThan(199);
@@ -344,24 +360,53 @@ beforeAll(async () => {
     log.info(
       `BassicAssetTransfer.Create(): ${JSON.stringify(createResponse.data)}`,
     );
-  }
 
+    const createResponseTrans1 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR2", "20"],
+      // params: [assetId, "Green", "19", assetOwner, "9999"],
+      methodName: "CreateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+
+    expect(createResponseTrans1).not.toBeUndefined();
+    expect(createResponseTrans1.status).toBeGreaterThan(199);
+    expect(createResponseTrans1.status).toBeLessThan(300);
+
+    const createResponseTrans2 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR1", "30"],
+      // params: [assetId, "Green", "19", assetOwner, "9999"],
+      methodName: "UpdateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+
+    expect(createResponseTrans2).not.toBeUndefined();
+    expect(createResponseTrans2.status).toBeGreaterThan(199);
+    expect(createResponseTrans2.status).toBeLessThan(300);
+  }
   // BUNGEE options
   pluginBungeeOptions = {
+    bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer(),
     instanceId: uuidv4(),
+    fabricApi: apiClient,
     fabricPath: fabricPath,
     fabricSigningCredential: fabricSigningCredential,
     fabricChannelName: fabricChannelName,
     fabricContractName: fabricContractName,
     fabricAssetID: FABRIC_ASSET_ID,
+    fabricConfig: configFabric,
   };
 });
 test("simple test bungee", async () => {
-  // const sessionID = pluginSourceGateway.configureOdapSession(pluginBungee);
   pluginBungee = new PluginBUNGEE(pluginBungeeOptions);
-  pluginBungee.saveViews();
-  log.info(`pluginBungee.getBlocks(): ${pluginBungee.getBlocks()}`);
-  log.info(`pluginBungee.generateView(): ${pluginBungee.generateView()}`);
+  // pluginBungee.saveViews();
+  const resp = await pluginBungee.getBlocks();
+  log.info(`pluginBungee.getBlocks(): ${resp}`);
 });
 
 afterAll(async () => {
