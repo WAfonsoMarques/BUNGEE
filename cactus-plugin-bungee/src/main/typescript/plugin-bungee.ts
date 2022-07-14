@@ -132,10 +132,12 @@ export class PluginBUNGEE {
     // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: ${fabricLockAssetProof}`);
     // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: `);
 
-    const allAssets = await this.getAllAssets();
+    const allTx = await this.getAllTx();
     
-    this.logger.info(`BLOCKS: ----- ${allAssets}`);
+    this.logger.info(`-------------------------------------BEGIN TX------------------------------------`);
     
+    this.logger.info(allTx);
+    this.logger.info(`--------------------------------------END--------------------------------------`);
     // fabricLockAssetProof = await this.fabricGetTxReceiptByTxIDV1(txId);
 
     // this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
@@ -186,6 +188,24 @@ export class PluginBUNGEE {
       channelName: this.fabricChannelName,
       contractName: this.fabricContractName,
       methodName: "GetAllAssets",
+      invocationType: FabricContractInvocationType.Call,
+      params: [],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      return response.data.functionOutput;
+    }
+
+    return "response undefined";
+  }
+
+  async getAllTx(): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllTx",
       invocationType: FabricContractInvocationType.Call,
       params: [],
     } as FabricRunTransactionRequest);
