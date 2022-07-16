@@ -127,13 +127,27 @@ export class AssetTransferContract extends Contract {
     return JSON.stringify(allResults);
   }
 
-  // GetAllAssets returns all assets found in the world state.
+  // GetAllAssetsKey returns all assets key found in the world state.
   @Transaction(false)
   @Returns("string")
-  public async GetAllTx(ctx: Context): Promise<string> {
+  public async GetAllAssetsKey(ctx: Context): Promise<string> {
     const allResults = [];
     // range query with empty string for startKey and endKey does an open-ended query of all assets in the chaincode namespace.
-    const iterator = await ctx.stub.getHistoryForKey("CAR1");
+    const iterator = await ctx.stub.getStateByRange("", "");
+    let result = await iterator.next();
+    while (!result.done) {
+      allResults.push(result.value.key);
+      result = await iterator.next();
+    }
+    return allResults.toString();
+  }
+
+  // GetAllTxByKey returns all transations for a specific key.
+  @Transaction(false)
+  @Returns("string")
+  public async GetAllTxByKey(ctx: Context, key: string): Promise<string> {
+    const allResults = [];
+    const iterator = await ctx.stub.getHistoryForKey(key);
     let result = await iterator.next();
     while (!result.done) {
       const strValue = JSON.stringify(result);

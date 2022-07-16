@@ -1,6 +1,6 @@
 export class Snapshot {
   private id: string;
-  private version: Record<string, string>;
+  private version: number;
   private stateBins: string[]; //set of state bins
   private initialTime?: string;
   private finalTime?: string;
@@ -8,17 +8,16 @@ export class Snapshot {
 
   constructor(
     id: string,
-    version: Record<string, string>,
     stateBins: string[],
-    initialTime: string,
-    finalTime: string,
+    // initialTime: string,
+    // finalTime: string,
     transactions: string[],
   ) {
     this.id = id;
-    this.version = version;
+    this.version = stateBins.length;
     this.stateBins = stateBins;
-    this.initialTime = initialTime;
-    this.finalTime = finalTime;
+    // this.initialTime = initialTime;
+    // this.finalTime = finalTime;
     this.transactions = transactions;
   }
 
@@ -27,11 +26,15 @@ export class Snapshot {
       "SNAPSHOT: \n " +
       this.id +
       " \n " +
-      this.version +
+      this.getVersion() +
       " \n " +
       this.stateBins +
       " \n " +
       this.transactions.toString()
     );
+  }
+
+  private getVersion(): string {
+    return this.stateBins.length.toString();
   }
 }

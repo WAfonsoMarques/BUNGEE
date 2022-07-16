@@ -33,6 +33,9 @@ import {
 } from "@hyperledger/cactus-plugin-ledger-connector-fabric";
 import { Utils } from "./utils";
 import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescript/secp256k1-keys";
+import { Snapshot } from "./snapshot";
+import { Transaction } from "./transaction";
+import { Endorsement } from "./endorsment";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   bungeeKeys: ISignerKeyPair
@@ -62,7 +65,11 @@ export class PluginBUNGEE {
   private privKeyBungee: string;
   private pubKeyBungee: string;
 
-  private ledgerSnapshot: string[]
+  private ledgerAssetsKey: string[];
+  private txForKey: Map<string, Transaction[]>;
+  private txEndorsement: Map<string, Endorsement[]>;//Perguntar ao rafael //txId, txEndorsements
+  private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
+
 
   public fabricApi?: FabricApi;
   public fabricSigningCredential?: FabricSigningCredential;
@@ -76,6 +83,7 @@ export class PluginBUNGEE {
   private level: LogLevelDesc;
   private logger: Logger;
   public pluginRegistry: PluginRegistry;
+
   constructor(public readonly options: IPluginBUNGEEOptions) {
     this.keyPairBungee = options.bungeeKeys;
     this.instanceId = uuidv4();
@@ -89,10 +97,15 @@ export class PluginBUNGEE {
     this.privKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.privateKey);
     this.pubKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.publicKey);
 
+    this.ledgerAssetsKey = [];
+    this.txForKey = new Map<string, Transaction[]>();
+    this.txEndorsement = new Map<string, Endorsement[]>();
+    this.ledgerSnapShots = new Map<string, Snapshot>();
+    
+
     this.pluginRegistry = new PluginRegistry();
     this.fabricApi = options.fabricApi;
 
-    this.ledgerSnapshot = [];
 
     if (options.fabricPath != undefined) this.defineFabricConnection(options);
   }
@@ -113,30 +126,117 @@ export class PluginBUNGEE {
     return;
   }
 
-  public generateSnapshot(): void {
-    this.ledgerSnapshot = [];
-    this.logger.info(this.ledgerSnapshot);
+  public async generateLedgerSnapshot(): Promise<string> {
+    this.logger.info(`Generating ledger snapshot`);
+    
+    const assetsKey = await this.getAllAssetsKey();
+    this.ledgerAssetsKey = assetsKey.split(",");//Car1 Car2
+    
+    //For each key in ledgerAssetsKey
+    for(const assetKey of this.ledgerAssetsKey){
+      // eslint-disable-next-line prefer-const
+      let assetValues: string[] = [];
+      // eslint-disable-next-line prefer-const
+      let txIds: string[] = [];
+
+      this.logger.info(assetKey);
+      const txs = await this.getAllTxByKey(assetKey);
+
+      this.txForKey.set(assetKey, txs); 
+      
+      //For each tx get receipt
+      for(const tx of txs){
+        txIds.push(tx.getId());
+        const endorsements: Endorsement[] = [];
+        const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
+       
+        assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
+        //Save endorsements of tx
+        for (const endorsement of  receipt.transactionEndorsement) {
+          endorsements.push(new Endorsement(endorsement.mspid, endorsement.endorserID, endorsement.signature));
+        }
+
+        this.txEndorsement.set(tx.getId(), endorsements);
+      }
+
+      this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txIds));
+    }
+    
+    this.logger.info(` --------------- ledgerSnapShots ---------------`);
+    this.logger.info(this.ledgerSnapShots);
+    
+    this.logger.info(` --------------- SNAPSHOT ---------------`);
+    this.logger.info(this.ledgerSnapShots.get("CAR1"));
+    this.logger.info(this.ledgerSnapShots.get("CAR2"));
+    this.logger.info(` --------------- END SNAPSHOT ---------------`);
+  
+
+  //   for (const key in this.ledgerSnapShots) {
+  //     const snap = this.ledgerSnapShots[key];
+  //     this.logger.info(` --------------- SNAPSHOT ---------------`);
+  //     this.logger.info(snap.printSnapshot());
+      
+  // } 
+
+    return "";   
   }
   
   //Connect to fabric, retrive blocks
   async getBlocks(): Promise<string> {
+
     // this.ledgerConnector.getTransactionReceiptByTxID();
     // this.fabricApi?.deployContractGoSourceV1
     this.logger.info(`Called getBlocks()`);
     // const fnTag = `${this.className}#lockFabricAsset()`;
 
     // let fabricLockAssetProof = "";
-
-    // const txId = await this.fabricLookAsset();
      
     // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: ${fabricLockAssetProof}`);
     // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: `);
-
-    const allTx = await this.getAllTx();
     
     this.logger.info(`-------------------------------------BEGIN TX------------------------------------`);
+    const keysString = await this.getAllAssetsKey();
+    const keys = keysString.split(",");
+    this.logger.info(keys.toString());
+    // eslint-disable-next-line prefer-const
+    let transactionsRawByKey: string[] = [];
     
-    this.logger.info(allTx);
+    for (const key of keys) {
+      const allTxByKey = await this.getAllTxByKeyString(key);
+      transactionsRawByKey.push(allTxByKey);
+      this.logger.info(allTxByKey);
+    }
+
+    this.logger.info(`transactionsRawByKey -> ${transactionsRawByKey}`);
+    
+    for (const txsByKey of transactionsRawByKey) {
+      this.logger.info(`txsByKey -> ${txsByKey}`);
+    
+      for(const tx of JSON.parse(txsByKey)) {
+
+        this.logger.info("--- Estou a passar esta transacao ---");
+        this.logger.info(tx);
+
+
+        this.logger.info("--- Passing to RECEIPT begin ---");
+        this.logger.info(tx.value.txId);
+        this.logger.info("--- Passing to RECEIPT end ---");
+
+        //GET transaction receipt
+        const receipt = await this.fabricGetTxReceiptByTxIDV1(tx.value.txId);
+        
+        this.logger.info("--- RECEIPT begin ---");
+        // const txEndorsement = JSON.parse(receipt).transactionEndorsement;
+        this.logger.info(receipt);
+        this.logger.info("--- RECEIPT end ---");
+        // const snapshot = new Snapshot();
+        // this.snapShots.set(tx.value.txId, );
+      }
+
+    }
+
+    
+    // this.logger.info(allTx); 
     this.logger.info(`--------------------------------------END--------------------------------------`);
     // fabricLockAssetProof = await this.fabricGetTxReceiptByTxIDV1(txId);
 
@@ -146,23 +246,6 @@ export class PluginBUNGEE {
     // return fabricLockAssetProof;
   }
 
-  async fabricLookAsset(): Promise<string> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "LockAsset",
-      invocationType: FabricContractInvocationType.Send,
-      params: [this.fabricAssetID],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      return response.data.transactionId;
-    }
-
-    return "response undefined";
-  }
   
   async fabricGetTxReceiptByTxIDV1(transactionId: string): Promise<string> {
     const receiptLockRes = await this.fabricApi?.getTransactionReceiptByTxIDV1(
@@ -176,47 +259,67 @@ export class PluginBUNGEE {
         params: [this.fabricChannelName, transactionId],
       } as FabricRunTransactionRequest,
     );
-    const headerPlusData = JSON.stringify(receiptLockRes?.headers) +"\nHeader---------data\n" + JSON.stringify(receiptLockRes?.data); 
-    return JSON.stringify(headerPlusData);
-    // return JSON.stringify(receiptLockRes?.data);
-  }
 
-  async getAllAssets(): Promise<string> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "GetAllAssets",
-      invocationType: FabricContractInvocationType.Call,
-      params: [],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      return response.data.functionOutput;
-    }
-
-    return "response undefined";
-  }
-
-  async getAllTx(): Promise<string> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "GetAllTx",
-      invocationType: FabricContractInvocationType.Call,
-      params: [],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      return response.data.functionOutput;
-    }
-
-    return "response undefined";
+    return JSON.stringify(receiptLockRes?.data);
   }
   
+
+  async getAllAssetsKey(): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllAssetsKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      return response.data.functionOutput;
+    }
+
+    return "response undefined";
+  }
+
+  async getAllTxByKey(key: string): Promise<Transaction[]> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllTxByKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [key],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      
+      return Utils.txsStringToTxs(response.data.functionOutput);
+    }
+
+    return [];
+  }
+
+  async getAllTxByKeyString(key: string): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllTxByKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [key],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      
+      return response.data.functionOutput;
+    }
+
+    return "";
+  }
+
   
   public generateView(): void {
     this.getBlocks();

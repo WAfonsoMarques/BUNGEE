@@ -375,19 +375,41 @@ beforeAll(async () => {
     expect(createResponseTrans1.status).toBeGreaterThan(199);
     expect(createResponseTrans1.status).toBeLessThan(300);
 
+    // const createResponseTrans2 = await apiClient.runTransactionV1({
+    //   contractName: fabricContractName,
+    //   channelName: fabricChannelName,
+    //   params: ["CAR1", "30"],
+    //   // params: [assetId, "Green", "19", assetOwner, "9999"],
+    //   methodName: "UpdateAsset",
+    //   invocationType: FabricContractInvocationType.Send,
+    //   signingCredential: fabricSigningCredential,
+    // });
+
     const createResponseTrans2 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR1", "40"],
+      // params: [assetId, "Green", "19", assetOwner, "9999"],
+      methodName: "CreateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+    expect(createResponseTrans2).not.toBeUndefined();
+    expect(createResponseTrans2.status).toBeGreaterThan(199);
+    expect(createResponseTrans2.status).toBeLessThan(300);
+
+    const createResponseTrans3 = await apiClient.runTransactionV1({
       contractName: fabricContractName,
       channelName: fabricChannelName,
       params: ["CAR1", "30"],
       // params: [assetId, "Green", "19", assetOwner, "9999"],
-      methodName: "UpdateAsset",
+      methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
     });
-
-    expect(createResponseTrans2).not.toBeUndefined();
-    expect(createResponseTrans2.status).toBeGreaterThan(199);
-    expect(createResponseTrans2.status).toBeLessThan(300);
+    expect(createResponseTrans3).not.toBeUndefined();
+    expect(createResponseTrans3.status).toBeGreaterThan(199);
+    expect(createResponseTrans3.status).toBeLessThan(300);
   }
   // BUNGEE options
   pluginBungeeOptions = {
@@ -405,7 +427,7 @@ beforeAll(async () => {
 test("simple test bungee", async () => {
   pluginBungee = new PluginBUNGEE(pluginBungeeOptions);
   // pluginBungee.saveViews();
-  const resp = await pluginBungee.getBlocks();
+  const resp = await pluginBungee.generateLedgerSnapshot();
   log.info(`pluginBungee.getBlocks(): ${resp}`);
 });
 
