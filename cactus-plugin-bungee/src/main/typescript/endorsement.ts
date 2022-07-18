@@ -20,6 +20,16 @@ export class Endorsement {
     );
   }
 
+  public getEndorsementJson(): string {
+    const endors = {
+      mspid: this.mspid,
+      endorserID: this.endorserID,
+      signature: this.signature,
+    };
+    // JSON.stringify(Array.from(endors.entries()));
+    return JSON.stringify(endors);
+  }
+
   public getMspid(): string {
     return this.mspid;
   }

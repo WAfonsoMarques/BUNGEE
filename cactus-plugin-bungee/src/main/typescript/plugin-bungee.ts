@@ -35,7 +35,7 @@ import { Utils } from "./utils";
 import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescript/secp256k1-keys";
 import { Snapshot } from "./snapshot";
 import { Transaction } from "./transaction";
-import { Endorsement } from "./endorsment";
+import { Endorsement } from "./endorsement";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   bungeeKeys: ISignerKeyPair
@@ -67,7 +67,7 @@ export class PluginBUNGEE {
 
   private ledgerAssetsKey: string[];
   private txForKey: Map<string, Transaction[]>;
-  private txEndorsement: Map<string, Endorsement[]>;//Perguntar ao rafael //txId, txEndorsements
+  // private txEndorsement: Map<string, Endorsement[]>;//Perguntar ao rafael //txId, txEndorsements
   private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
 
 
@@ -99,7 +99,7 @@ export class PluginBUNGEE {
 
     this.ledgerAssetsKey = [];
     this.txForKey = new Map<string, Transaction[]>();
-    this.txEndorsement = new Map<string, Endorsement[]>();
+    // this.txEndorsement = new Map<string, Endorsement[]>();
     this.ledgerSnapShots = new Map<string, Snapshot>();
     
 
@@ -135,9 +135,11 @@ export class PluginBUNGEE {
     //For each key in ledgerAssetsKey
     for(const assetKey of this.ledgerAssetsKey){
       // eslint-disable-next-line prefer-const
+      // let txEndorsement = new Map<string, Endorsement[]>();
+      // eslint-disable-next-line prefer-const
       let assetValues: string[] = [];
       // eslint-disable-next-line prefer-const
-      let txIds: string[] = [];
+      let txWithTimeS: Transaction[] = [];
 
       this.logger.info(assetKey);
       const txs = await this.getAllTxByKey(assetKey);
@@ -146,29 +148,45 @@ export class PluginBUNGEE {
       
       //For each tx get receipt
       for(const tx of txs){
-        txIds.push(tx.getId());
         const endorsements: Endorsement[] = [];
         const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
-       
+        
         assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
         //Save endorsements of tx
         for (const endorsement of  receipt.transactionEndorsement) {
           endorsements.push(new Endorsement(endorsement.mspid, endorsement.endorserID, endorsement.signature));
         }
-
-        this.txEndorsement.set(tx.getId(), endorsements);
+        tx.defineTxEndorsements(endorsements);
+        txWithTimeS.push(tx);
+        // txEndorsement.set(tx.getId(), endorsements);
       }
-
-      this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txIds));
+      
+      this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txWithTimeS));
     }
     
-    this.logger.info(` --------------- ledgerSnapShots ---------------`);
-    this.logger.info(this.ledgerSnapShots);
     
     this.logger.info(` --------------- SNAPSHOT ---------------`);
-    this.logger.info(this.ledgerSnapShots.get("CAR1"));
-    this.logger.info(this.ledgerSnapShots.get("CAR2"));
+    const car1 = this.ledgerSnapShots.get("CAR1");
+    const car2 = this.ledgerSnapShots.get("CAR2");
+    this.logger.info(car1);
+    this.logger.info(car2);
     this.logger.info(` --------------- END SNAPSHOT ---------------`);
+  
+    this.logger.info(` --------------- SNAPSHOT V1---------------`);
+    this.logger.info(car1?.getSnapshotJson());
+    this.logger.info(car2?.getSnapshotJson());
+    this.logger.info(` --------------- END SNAPSHOT V1---------------`);
+
+    this.logger.info(` --------------- SNAPSHOT V2---------------`);
+    if (car1 != undefined){
+      this.logger.info(JSON.parse(car1.getSnapshotJson()));
+      
+    }
+    if (car2 != undefined){
+      this.logger.info(JSON.parse(car2.getSnapshotJson()));
+      
+    }
+    this.logger.info(` --------------- END SNAPSHOT V2---------------`);
   
 
   //   for (const key in this.ledgerSnapShots) {
@@ -181,6 +199,10 @@ export class PluginBUNGEE {
     return "";   
   }
   
+  public generateView(ti: string, tf: string, snapshots: Snapshot[]): string{
+    return "";
+  }
+
   //Connect to fabric, retrive blocks
   async getBlocks(): Promise<string> {
 
@@ -213,7 +235,7 @@ export class PluginBUNGEE {
       this.logger.info(`txsByKey -> ${txsByKey}`);
     
       for(const tx of JSON.parse(txsByKey)) {
-
+        tx.timestamp;
         this.logger.info("--- Estou a passar esta transacao ---");
         this.logger.info(tx);
 
@@ -321,10 +343,10 @@ export class PluginBUNGEE {
   }
 
   
-  public generateView(): void {
-    this.getBlocks();
-    this.logger.info(`Called generateView()`);
-  }
+  // public generateView(): void {
+  //   this.getBlocks();
+  //   this.logger.info(`Called generateView()`);
+  // }
   
   //Must be atomic
   public saveViews(): void {

@@ -427,8 +427,11 @@ beforeAll(async () => {
 test("simple test bungee", async () => {
   pluginBungee = new PluginBUNGEE(pluginBungeeOptions);
   // pluginBungee.saveViews();
-  const resp = await pluginBungee.generateLedgerSnapshot();
-  log.info(`pluginBungee.getBlocks(): ${resp}`);
+  const ledgerSnapshot = await pluginBungee.generateLedgerSnapshot();
+  log.info(`pluginBungee.generateLedgerSnapshot(): ${ledgerSnapshot}`);
+  
+  // const views = pluginBungee.generateView(ledgerSnapshot);
+  // log.info(`pluginBungee.generateView(): ${views}`);
 });
 
 afterAll(async () => {

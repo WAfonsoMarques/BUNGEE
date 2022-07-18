@@ -14,7 +14,8 @@ export class Utils {
 
     for (const tx of txs) {
       const txId = tx.value.txId;
-      const ts = tx.value.timestamp.seconds + "." + tx.value.timestamp.nanos;
+      // const ts = tx.value.timestamp.seconds + "." + tx.value.timestamp.nanos;
+      const ts = tx.value.timestamp.seconds;
       transactions.push(new Transaction(txId, ts));
     }
 
