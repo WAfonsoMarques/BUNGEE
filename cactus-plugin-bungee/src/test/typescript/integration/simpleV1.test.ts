@@ -331,27 +331,26 @@ beforeAll(async () => {
       keychainId,
       keychainRef: keychainEntryKey,
     };
+    // CAR1 = 3 TX -> 2 tx
+    // CAR2 = 3 TX -> 2 tx
+    // CAR3 = 1 TX -> 1 tx
+    // ==========
+    // CAR1 -> 10 > Remove
+    // CAR2 -> 20 <---Ti Keep
+    // CAR1 -> 40  Keep
+    // CAR1 -> 30  Keep
+    // CAR3 -> 100 Keep
+    // CAR2 -> 40 <---Tf Keep
+    // CAR2 -> 60 > Remove
 
     const createResponse = await apiClient.runTransactionV1({
       contractName: fabricContractName,
       channelName: fabricChannelName,
       params: ["CAR1", "10"],
-      // params: [assetId, "Green", "19", assetOwner, "9999"],
       methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
     });
-
-    // const createResponse = await apiClient.runTransactionV1({
-    //   contractName: fabricContractName,
-    //   channelName: fabricChannelName,
-    //   //params: [],
-    //   params: [FABRIC_ASSET_ID, "19"],
-    //   // params: [assetId, "Green", "19", assetOwner, "9999"],
-    //   methodName: "CreateAsset",
-    //   invocationType: FabricContractInvocationType.Send,
-    //   signingCredential: fabricSigningCredential,
-    // });
 
     expect(createResponse).not.toBeUndefined();
     expect(createResponse.status).toBeGreaterThan(199);
@@ -365,7 +364,6 @@ beforeAll(async () => {
       contractName: fabricContractName,
       channelName: fabricChannelName,
       params: ["CAR2", "20"],
-      // params: [assetId, "Green", "19", assetOwner, "9999"],
       methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
@@ -389,7 +387,6 @@ beforeAll(async () => {
       contractName: fabricContractName,
       channelName: fabricChannelName,
       params: ["CAR1", "40"],
-      // params: [assetId, "Green", "19", assetOwner, "9999"],
       methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
@@ -402,7 +399,6 @@ beforeAll(async () => {
       contractName: fabricContractName,
       channelName: fabricChannelName,
       params: ["CAR1", "30"],
-      // params: [assetId, "Green", "19", assetOwner, "9999"],
       methodName: "CreateAsset",
       invocationType: FabricContractInvocationType.Send,
       signingCredential: fabricSigningCredential,
@@ -410,11 +406,47 @@ beforeAll(async () => {
     expect(createResponseTrans3).not.toBeUndefined();
     expect(createResponseTrans3.status).toBeGreaterThan(199);
     expect(createResponseTrans3.status).toBeLessThan(300);
+
+    const createResponseTrans4 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR3", "100"],
+      methodName: "CreateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+    expect(createResponseTrans4).not.toBeUndefined();
+    expect(createResponseTrans4.status).toBeGreaterThan(199);
+
+    const createResponseTrans6 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR2", "40"],
+      methodName: "CreateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+    expect(createResponseTrans6).not.toBeUndefined();
+    expect(createResponseTrans6.status).toBeGreaterThan(199);
+    expect(createResponseTrans6.status).toBeLessThan(300);
+
+    const createResponseTrans8 = await apiClient.runTransactionV1({
+      contractName: fabricContractName,
+      channelName: fabricChannelName,
+      params: ["CAR2", "60"],
+      methodName: "CreateAsset",
+      invocationType: FabricContractInvocationType.Send,
+      signingCredential: fabricSigningCredential,
+    });
+    expect(createResponseTrans8).not.toBeUndefined();
+    expect(createResponseTrans8.status).toBeGreaterThan(199);
+    expect(createResponseTrans8.status).toBeLessThan(300);
   }
   // BUNGEE options
   pluginBungeeOptions = {
     bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer(),
     instanceId: uuidv4(),
+    participant: "Org1MSP",
     fabricApi: apiClient,
     fabricPath: fabricPath,
     fabricSigningCredential: fabricSigningCredential,
@@ -427,10 +459,11 @@ beforeAll(async () => {
 test("simple test bungee", async () => {
   pluginBungee = new PluginBUNGEE(pluginBungeeOptions);
   // pluginBungee.saveViews();
-  const ledgerSnapshot = await pluginBungee.generateLedgerSnapshot();
-  log.info(`pluginBungee.generateLedgerSnapshot(): ${ledgerSnapshot}`);
-  
-  // const views = pluginBungee.generateView(ledgerSnapshot);
+  const ledgerStates = await pluginBungee.generateLedgerStates();
+  log.info(`pluginBungee.generateLedgerStates(): ${ledgerStates}`);
+  const snapshot = pluginBungee.generateSnapshot();
+  log.info(`pluginBungee.generateSnapshot(): ${snapshot}`);
+  // const views = pluginBungee.generateView();
   // log.info(`pluginBungee.generateView(): ${views}`);
 });
 

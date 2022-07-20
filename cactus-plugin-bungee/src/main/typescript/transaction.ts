@@ -31,4 +31,8 @@ export class Transaction {
     const txEndorsements = { Id: this.id, Endorsements: this.endorsements };
     return JSON.stringify(txEndorsements);
   }
+
+  public getTimeStamp(): string {
+    return this.timeStamp;
+  }
 }

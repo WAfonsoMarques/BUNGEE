@@ -1,84 +1,41 @@
 // import { Endorsement } from "./endorsement";
-import { Transaction } from "./transaction";
+import { State } from "./state";
 
 export class Snapshot {
   private id: string;
+  private participant;
   private version: number;
-  private stateBins: string[]; //set of state bins
-  // private initialTime: string;
-  // private finalTime?: string;
-  private transactions: Transaction[];
-  // private transactionsEndorsements: Map<string, Endorsement[]>;
+  private stateBins: State[]; //set of state bins
 
-  constructor(
-    id: string,
-    stateBins: string[],
-    // initialTime: string,
-    // finalTime: string,
-    transactions: Transaction[],
-    // transactionsEndorsements: Map<string, Endorsement[]>,
-  ) {
+  constructor(id: string, participant: string, stateBins: State[]) {
     this.id = id;
-    this.version = stateBins.length;
+    this.participant = participant;
+    this.version = 1;
     this.stateBins = stateBins;
-    // this.initialTime = initialTime;
-    // this.finalTime = finalTime;
-    this.transactions = transactions;
-    // this.transactionsEndorsements = transactionsEndorsements;
   }
 
-  // public getSnapshot(): string {
-  //   return (
-  //     "SNAPSHOT: \n " +
-  //     this.id +
-  //     " \n " +
-  //     this.getVersion() +
-  //     " \n " +
-  //     // this.initialTime +
-  //     // " \n " +
-  //     // this.getFinalTime() +
-  //     // " \n " +
-  //     this.stateBins +
-  //     " \n " +
-  //     this.transactions.toString() +
-  //     " \n " +
-  //     this.transactionsEndorsements +
-  //     " \n " +
-  //     JSON.stringify(this.transactionsEndorsements)
-  //   );
-  // }
+  private getVersion(): number {
+    return this.version;
+  }
 
-  public getSnapshotJson(): string {
-    // eslint-disable-next-line prefer-const
-    let txs: string[] = [];
-    // eslint-disable-next-line prefer-const
-    let txEndorsements: string[] = [];
-
-    for (const tx of this.transactions) {
-      txs.push(tx.getTxJson());
-      txEndorsements.push(tx.getTxEndorsements());
+  public pruneStates(tI: string, tF: string): void {
+    for (const state of this.stateBins) {
+      state.pruneState(tI, tF);
     }
+  }
 
-    const jsonSnap = {
-      Id: this.id,
-      Version: this.getVersion(),
+  public getLedgerStates(): State[] {
+    return this.stateBins;
+  }
+
+  public getSnapShotJson(): string {
+    const snapshotJson = {
+      SnapshotId: this.id,
+      Participant: this.participant,
+      Version: this.version,
       StateBins: this.stateBins,
-      Transactions: txs,
-      Endorsements: txEndorsements,
     };
 
-    return JSON.stringify(jsonSnap);
-  }
-
-  // private getFinalTime(): string {
-  //   if (this.finalTime == undefined) {
-  //     return this.initialTime;
-  //   }
-
-  //   return this.finalTime;
-  // }
-
-  private getVersion(): string {
-    return this.stateBins.length.toString();
+    return JSON.stringify(snapshotJson);
   }
 }

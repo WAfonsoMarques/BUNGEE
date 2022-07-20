@@ -14,6 +14,8 @@ import {
 } from "@hyperledger/cactus-core-api";
 
 import {
+  IJsObjectSignerOptions,
+  JsObjectSigner,
   Logger,
   LoggerProvider,
   LogLevelDesc,
@@ -36,11 +38,13 @@ import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescr
 import { Snapshot } from "./snapshot";
 import { Transaction } from "./transaction";
 import { Endorsement } from "./endorsement";
+import { State } from "./state";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   bungeeKeys: ISignerKeyPair
   instanceId: string;
-  
+  participant: string;
+
   fabricPath?: string;
   fabricSigningCredential?: FabricSigningCredential;
   fabricChannelName?: string;
@@ -61,15 +65,17 @@ export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
 
 export class PluginBUNGEE {
   // private readonly ledgerConnector: any;
-  private keyPairBungee: Secp256k1Keys;
+  private bungeeSigner: JsObjectSigner;
+  // private keyPairBungee: Secp256k1Keys;
   private privKeyBungee: string;
   private pubKeyBungee: string;
 
-  private ledgerAssetsKey: string[];
-  private txForKey: Map<string, Transaction[]>;
-  // private txEndorsement: Map<string, Endorsement[]>;//Perguntar ao rafael //txId, txEndorsements
-  private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
+  private participant;
 
+  private ledgerAssetsKey: string[];
+  // private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
+  private ledgerStates: Map<string, State>; //Key, state
+  private states: State[];
 
   public fabricApi?: FabricApi;
   public fabricSigningCredential?: FabricSigningCredential;
@@ -85,8 +91,20 @@ export class PluginBUNGEE {
   public pluginRegistry: PluginRegistry;
 
   constructor(public readonly options: IPluginBUNGEEOptions) {
-    this.keyPairBungee = options.bungeeKeys;
+    // this.keyPairBungee = options.bungeeKeys;
+    const keyPairBungee = options.bungeeKeys? options.bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer();
+  
+    this.pubKeyBungee = Utils.bufArray2HexStr(keyPairBungee.publicKey);
+    this.privKeyBungee = Utils.bufArray2HexStr(keyPairBungee.privateKey);
+    
+    const bungeeSignerOptions: IJsObjectSignerOptions = {
+      privateKey: this.privKeyBungee,
+      logLevel: "debug",
+    };
+    this.bungeeSigner = new JsObjectSigner(bungeeSignerOptions);
+
     this.instanceId = uuidv4();
+    this.participant = options.participant;
 
     this.className = "pluginBUNGEE";
     this.level = options.logLevel || "INFO";
@@ -98,10 +116,11 @@ export class PluginBUNGEE {
     this.pubKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.publicKey);
 
     this.ledgerAssetsKey = [];
-    this.txForKey = new Map<string, Transaction[]>();
+    // this.txForKey = new Map<string, Transaction[]>();
     // this.txEndorsement = new Map<string, Endorsement[]>();
-    this.ledgerSnapShots = new Map<string, Snapshot>();
-    
+    // this.ledgerSnapShots = new Map<string, Snapshot>();
+    this.ledgerStates = new Map<string, State>();
+    this.states = [];
 
     this.pluginRegistry = new PluginRegistry();
     this.fabricApi = options.fabricApi;
@@ -126,7 +145,11 @@ export class PluginBUNGEE {
     return;
   }
 
-  public async generateLedgerSnapshot(): Promise<string> {
+  sign(msg: string): Uint8Array {
+    return this.bungeeSigner.sign(msg);
+  }
+
+  public async generateLedgerStates(): Promise<string> {
     this.logger.info(`Generating ledger snapshot`);
     
     const assetsKey = await this.getAllAssetsKey();
@@ -144,12 +167,16 @@ export class PluginBUNGEE {
       this.logger.info(assetKey);
       const txs = await this.getAllTxByKey(assetKey);
 
-      this.txForKey.set(assetKey, txs); 
+      // this.txForKey.set(assetKey, txs); 
       
       //For each tx get receipt
       for(const tx of txs){
         const endorsements: Endorsement[] = [];
         const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
+        // Checks if tx was made by participant
+        if(receipt.transactionCreator.mspid != this.participant){
+          continue;
+        }
         
         assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
         //Save endorsements of tx
@@ -161,47 +188,89 @@ export class PluginBUNGEE {
         // txEndorsement.set(tx.getId(), endorsements);
       }
       
-      this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txWithTimeS));
+      // this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txWithTimeS));
+      const state = new State(assetKey, assetValues, txWithTimeS);
+      this.ledgerStates.set(assetKey, state);//Might delete
+      this.states.push(state);
+
     }
     
-    
-    this.logger.info(` --------------- SNAPSHOT ---------------`);
-    const car1 = this.ledgerSnapShots.get("CAR1");
-    const car2 = this.ledgerSnapShots.get("CAR2");
-    this.logger.info(car1);
-    this.logger.info(car2);
-    this.logger.info(` --------------- END SNAPSHOT ---------------`);
-  
-    this.logger.info(` --------------- SNAPSHOT V1---------------`);
-    this.logger.info(car1?.getSnapshotJson());
-    this.logger.info(car2?.getSnapshotJson());
-    this.logger.info(` --------------- END SNAPSHOT V1---------------`);
-
-    this.logger.info(` --------------- SNAPSHOT V2---------------`);
-    if (car1 != undefined){
-      this.logger.info(JSON.parse(car1.getSnapshotJson()));
-      
-    }
-    if (car2 != undefined){
-      this.logger.info(JSON.parse(car2.getSnapshotJson()));
-      
-    }
-    this.logger.info(` --------------- END SNAPSHOT V2---------------`);
-  
-
-  //   for (const key in this.ledgerSnapShots) {
-  //     const snap = this.ledgerSnapShots[key];
-  //     this.logger.info(` --------------- SNAPSHOT ---------------`);
-  //     this.logger.info(snap.printSnapshot());
-      
-  // } 
+    this.logger.info(` --------------- STATES ---------------`);
+    this.ledgerStates.forEach((state: State, keyId: string) => {
+      console.log(keyId, state);
+      const assetState = this.ledgerStates.get(keyId);
+      if(assetState != undefined) {
+        this.logger.info(assetState);
+        this.logger.info(JSON.parse(assetState.getStateJson()));
+        
+      }
+    }); 
+    this.logger.info(` --------------- END STATES ---------------`);
 
     return "";   
   }
-  
-  public generateView(ti: string, tf: string, snapshots: Snapshot[]): string{
-    return "";
+
+  public generateSnapshot(): Snapshot {
+    const snapShotId = uuidv4();
+    const snapshot = new Snapshot(snapShotId, this.participant, this.states);
+    this.logger.info(` --------------- SNAPSHOT ---------------`);
+    this.logger.info(snapshot.getSnapShotJson());
+    return snapshot;
   }
+  
+  // public generateView(ti: string, tf: string, snapshots: Snapshot[]): string{
+  // public generateView(): string{
+  //   this.logger.info(`<><><><>GENERATEVIEW()<><><><>`);
+  //   const car1 = this.ledgerSnapShots.get("CAR1");
+  //   const car2 = this.ledgerSnapShots.get("CAR2");
+  //   const car3 = this.ledgerSnapShots.get("CAR3");
+
+  //   if(car1 != undefined && car2 != undefined && car3 != undefined) {
+  //     const tI = car2.getTimeForTxN(2); 
+  //     const tF = car2.getTimeForTxN(1); 
+  //     this.logger.info(`TEMPO INICIAL = ${tI}`);
+  //     this.logger.info(`TEMPO FINAL = ${tF}`);
+  
+  //     this.logger.info(`car1 time`);
+  //     this.logger.info(car1.getInitialTime());
+  //     this.logger.info(car1.getTimeForTxN(1));
+  //     this.logger.info(car1.getFinalTime());
+  
+  //     this.logger.info(`car2 time`);
+  //     this.logger.info(car2.getInitialTime());
+  //     this.logger.info(car2.getTimeForTxN(1));
+  //     this.logger.info(car2.getFinalTime());
+      
+  //     this.logger.info(`car3time`);
+  //     this.logger.info(car3.getInitialTime());
+  //     this.logger.info(car3.getFinalTime());
+  
+  //     car1.pruneSnapShot(tI, tF);
+  //     car2.pruneSnapShot(tI, tF);
+  //     car3.pruneSnapShot(tI, tF);
+
+  //     this.logger.info(JSON.parse(car1.getSnapshotJson()));
+  //     const signature1 = Utils.bufArray2HexStr(this.sign(car1.getSnapshotJson()));
+  //     this.logger.info(`SIGNATURE1: ${signature1}`);
+  //     this.logger.info({Snapshot: car1.getSnapshotJson(), Signature: signature1});
+
+  //     this.logger.info(JSON.parse(car2.getSnapshotJson()));
+  //     const signature2 = Utils.bufArray2HexStr(this.sign(car2.getSnapshotJson()));
+  //     this.logger.info(`SIGNATURE2: ${signature2}`);
+  //     this.logger.info({Snapshot: car2.getSnapshotJson(), Signature: signature2});
+
+  //     this.logger.info(JSON.parse(car3.getSnapshotJson()));
+  //     const signature3 = Utils.bufArray2HexStr(this.sign(car3.getSnapshotJson()));
+  //     this.logger.info(`SIGNATURE3: ${signature3}`);
+  //     this.logger.info(signature3);
+
+  //     this.logger.info({Snapshot: car3.getSnapshotJson(), Signature: signature3});
+      
+  //   }
+
+  //   return "";
+  // }
+
 
   //Connect to fabric, retrive blocks
   async getBlocks(): Promise<string> {
