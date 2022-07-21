@@ -22,7 +22,7 @@ export class State {
 
     for (const tx of this.transactions) {
       txs.push(tx.getTxJson());
-      txEndorsements.push(tx.getTxEndorsements());
+      txEndorsements.push(tx.getTxProofs());
     }
 
     const jsonSnap = {

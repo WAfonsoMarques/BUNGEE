@@ -37,8 +37,9 @@ import { Utils } from "./utils";
 import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescript/secp256k1-keys";
 import { Snapshot } from "./snapshot";
 import { Transaction } from "./transaction";
-import { Endorsement } from "./endorsement";
+import { Proof } from "./proof";
 import { State } from "./state";
+import { View } from "./view";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   bungeeKeys: ISignerKeyPair
@@ -69,6 +70,8 @@ export class PluginBUNGEE {
   // private keyPairBungee: Secp256k1Keys;
   private privKeyBungee: string;
   private pubKeyBungee: string;
+  private tI: string;
+  private tF: string;
 
   private participant;
 
@@ -76,7 +79,7 @@ export class PluginBUNGEE {
   // private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
   private ledgerStates: Map<string, State>; //Key, state
   private states: State[];
-
+  
   public fabricApi?: FabricApi;
   public fabricSigningCredential?: FabricSigningCredential;
   public fabricChannelName?: string;
@@ -121,7 +124,8 @@ export class PluginBUNGEE {
     // this.ledgerSnapShots = new Map<string, Snapshot>();
     this.ledgerStates = new Map<string, State>();
     this.states = [];
-
+    this.tI = "";
+    this.tF = "";
     this.pluginRegistry = new PluginRegistry();
     this.fabricApi = options.fabricApi;
 
@@ -171,7 +175,7 @@ export class PluginBUNGEE {
       
       //For each tx get receipt
       for(const tx of txs){
-        const endorsements: Endorsement[] = [];
+        const endorsements: Proof[] = [];
         const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
         // Checks if tx was made by participant
         if(receipt.transactionCreator.mspid != this.participant){
@@ -181,9 +185,9 @@ export class PluginBUNGEE {
         assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
         //Save endorsements of tx
         for (const endorsement of  receipt.transactionEndorsement) {
-          endorsements.push(new Endorsement(endorsement.mspid, endorsement.endorserID, endorsement.signature));
+          endorsements.push(new Proof(endorsement.mspid, endorsement.endorserID, endorsement.signature));
         }
-        tx.defineTxEndorsements(endorsements);
+        tx.defineTxProofs(endorsements);
         txWithTimeS.push(tx);
         // txEndorsement.set(tx.getId(), endorsements);
       }
@@ -205,6 +209,17 @@ export class PluginBUNGEE {
         
       }
     }); 
+
+    // TESTS ONLY
+    
+    const car2 = this.ledgerStates.get("CAR2");
+
+    if (car2 != undefined) {
+      this.tI = car2.getTimeForTxN(2);
+      this.tF = car2.getTimeForTxN(1);
+
+    }
+
     this.logger.info(` --------------- END STATES ---------------`);
 
     return "";   
@@ -217,7 +232,14 @@ export class PluginBUNGEE {
     this.logger.info(snapshot.getSnapShotJson());
     return snapshot;
   }
-  
+
+  public generateView(snapshot: Snapshot): string {
+    const view = new View(this.tI, this.tF, snapshot);
+    const signature = Utils.bufArray2HexStr(this.sign(view.getViewStr()));
+    const signedView = {View: view, Signature: signature};
+    this.saveViews(JSON.stringify(signedView, null, 2));
+    return JSON.stringify(signedView);
+  }
   // public generateView(ti: string, tf: string, snapshots: Snapshot[]): string{
   // public generateView(): string{
   //   this.logger.info(`<><><><>GENERATEVIEW()<><><><>`);
@@ -411,14 +433,15 @@ export class PluginBUNGEE {
     return "";
   }
 
-  
-  // public generateView(): void {
-  //   this.getBlocks();
-  //   this.logger.info(`Called generateView()`);
-  // }
-  
   //Must be atomic
-  public saveViews(): void {
+  public saveViews(viewStr: string): void {
+    const fs = require("fs");
+    
+    fs.writeFileSync("./viewFile.json", viewStr, function (err: boolean) {
+      if (err) {
+        return console.log("error");
+      }
+    });
     this.logger.info(`Called saveViews()`);
   }
   

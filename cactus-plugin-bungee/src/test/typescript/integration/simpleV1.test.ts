@@ -461,10 +461,13 @@ test("simple test bungee", async () => {
   // pluginBungee.saveViews();
   const ledgerStates = await pluginBungee.generateLedgerStates();
   log.info(`pluginBungee.generateLedgerStates(): ${ledgerStates}`);
+
   const snapshot = pluginBungee.generateSnapshot();
   log.info(`pluginBungee.generateSnapshot(): ${snapshot}`);
-  // const views = pluginBungee.generateView();
-  // log.info(`pluginBungee.generateView(): ${views}`);
+
+  const views = pluginBungee.generateView(snapshot);
+  log.info(`GRAND FINALE`);
+  log.info(`pluginBungee.generateView(): ${views}`);
 });
 
 afterAll(async () => {

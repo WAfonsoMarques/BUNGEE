@@ -1,22 +1,22 @@
-import { Endorsement } from "./endorsement";
+import { Proof } from "./proof";
 
 export class Transaction {
   private id: string;
   private timeStamp: string;
-  private endorsements: Endorsement[];
+  private proofs: Proof[];
 
   constructor(id: string, timeStamp: string) {
     this.id = id;
     this.timeStamp = timeStamp;
-    this.endorsements = [];
+    this.proofs = [];
   }
 
   public printTransaction(): string {
     return "Transaction: \n " + this.id + " \n " + this.timeStamp;
   }
 
-  public defineTxEndorsements(endorsements: Endorsement[]): void {
-    this.endorsements = endorsements;
+  public defineTxProofs(proofs: Proof[]): void {
+    this.proofs = proofs;
   }
   public getId(): string {
     return this.id;
@@ -27,9 +27,9 @@ export class Transaction {
     return JSON.stringify(tx);
   }
 
-  public getTxEndorsements(): string {
-    const txEndorsements = { Id: this.id, Endorsements: this.endorsements };
-    return JSON.stringify(txEndorsements);
+  public getTxProofs(): string {
+    const txProofs = { Id: this.id, Proofs: this.proofs };
+    return JSON.stringify(txProofs);
   }
 
   public getTimeStamp(): string {

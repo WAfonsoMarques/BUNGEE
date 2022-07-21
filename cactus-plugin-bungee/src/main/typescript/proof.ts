@@ -1,4 +1,4 @@
-export class Endorsement {
+export class Proof {
   private mspid: string;
   private endorserID: string;
   private signature: string;
@@ -21,13 +21,13 @@ export class Endorsement {
   }
 
   public getEndorsementJson(): string {
-    const endors = {
+    const proof = {
       mspid: this.mspid,
       endorserID: this.endorserID,
       signature: this.signature,
     };
     // JSON.stringify(Array.from(endors.entries()));
-    return JSON.stringify(endors);
+    return JSON.stringify(proof);
   }
 
   public getMspid(): string {

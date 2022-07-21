@@ -18,6 +18,10 @@ export class Snapshot {
     return this.version;
   }
 
+  private getId(): string {
+    return this.id;
+  }
+
   public pruneStates(tI: string, tF: string): void {
     for (const state of this.stateBins) {
       state.pruneState(tI, tF);
