@@ -26,11 +26,11 @@ export class State {
     }
 
     const jsonSnap = {
-      Id: this.id,
-      Version: this.getVersion(),
-      StateBins: this.values,
-      Transactions: txs,
-      Proofs: txEndorsements,
+      id: this.id,
+      version: this.getVersion(),
+      values: this.values,
+      transactions: txs,
+      proofs: txEndorsements,
     };
 
     return JSON.stringify(jsonSnap);
@@ -55,16 +55,8 @@ export class State {
     return "";
   }
 
-  // private getFinalTime(): string {
-  //   if (this.finalTime == undefined) {
-  //     return this.initialTime;
-  //   }
-
-  //   return this.finalTime;
-  // }
-
   private getVersion(): string {
-    return this.values.length.toString();
+    return this.version.toString();
   }
 
   public pruneState(tI: string, tF: string): void {
@@ -76,6 +68,7 @@ export class State {
         parseInt(element.getTimeStamp()) < tInum ||
         parseInt(element.getTimeStamp()) > tFnum
       ) {
+        this.version = this.version - 1;
         this.transactions.splice(index, 1); //Remove tx
         this.values.splice(index, 1); //Remove state of tx
       }

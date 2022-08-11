@@ -32,12 +32,12 @@ export class Snapshot {
     return this.stateBins;
   }
 
-  public getSnapShotJson(): string {
+  public getSnapshotJson(): string {
     const snapshotJson = {
-      SnapshotId: this.id,
-      Participant: this.participant,
-      Version: this.version,
-      StateBins: this.stateBins,
+      id: this.id,
+      participant: this.participant,
+      version: this.version,
+      stateBins: this.stateBins,
     };
 
     return JSON.stringify(snapshotJson);

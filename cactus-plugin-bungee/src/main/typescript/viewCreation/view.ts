@@ -17,6 +17,12 @@ export class View {
   }
 
   public getViewStr(): string {
-    return this.snapshot.getSnapShotJson();
+    const viewStr = {
+      tI: this.tI,
+      tF: this.tF,
+      snapshot: this.snapshot.getSnapshotJson(),
+    };
+    return JSON.stringify(viewStr);
+    // return this.snapshot.getSnapshotJson();
   }
 }

@@ -28,7 +28,7 @@ export class Transaction {
   }
 
   public getTxProofs(): string {
-    const txProofs = { Id: this.id, Proofs: this.proofs };
+    const txProofs = { id: this.id, proofs: this.proofs };
     return JSON.stringify(txProofs);
   }
 

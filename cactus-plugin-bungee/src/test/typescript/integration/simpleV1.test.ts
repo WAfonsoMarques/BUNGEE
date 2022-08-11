@@ -208,17 +208,6 @@ beforeAll(async () => {
     // │   └── index.ts
     // ├── tsconfig.json
     const sourceFiles: FileBase64[] = [];
-    // {
-    //   const filename = "./tslint.json";
-    //   const relativePath = "./";
-    //   const filePath = path.join(contractDir, relativePath, filename);
-    //   const buffer = await fs.readFile(filePath);
-    //   sourceFiles.push({
-    //     body: buffer.toString("base64"),
-    //     filepath: relativePath,
-    //     filename,
-    //   });
-    // }
     {
       const filename = "./tsconfig.json";
       const relativePath = "./";
@@ -444,7 +433,7 @@ beforeAll(async () => {
   }
   // BUNGEE options
   pluginBungeeOptions = {
-    bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer(),
+    // bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer(),
     instanceId: uuidv4(),
     participant: "Org1MSP",
     fabricApi: apiClient,

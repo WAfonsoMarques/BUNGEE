@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-empty-function */
 import { Server } from "http";
@@ -19,7 +20,6 @@ import {
   Logger,
   LoggerProvider,
   LogLevelDesc,
-  Secp256k1Keys,
 } from "@hyperledger/cactus-common";
 
 import { ICactusApiServerOptions } from "@hyperledger/cactus-cmd-api-server";
@@ -27,22 +27,20 @@ import { ICactusApiServerOptions } from "@hyperledger/cactus-cmd-api-server";
 import { PluginKeychainMemory } from "@hyperledger/cactus-plugin-keychain-memory";
 
 import {
-  // PluginLedgerConnectorFabric,
   DefaultApi as FabricApi,
   RunTransactionRequest as FabricRunTransactionRequest,
   FabricSigningCredential,
   FabricContractInvocationType,
 } from "@hyperledger/cactus-plugin-ledger-connector-fabric";
 import { Utils } from "./utils";
-import { ISignerKeyPair } from "@hyperledger/cactus-common/dist/lib/main/typescript/secp256k1-keys";
-import { Snapshot } from "./snapshot";
-import { Transaction } from "./transaction";
-import { Proof } from "./proof";
-import { State } from "./state";
-import { View } from "./view";
+import { Transaction } from "./viewCreation/transaction";
+import { Proof } from "./viewCreation/proof";
+import { State } from "./viewCreation/state";
+import { View } from "./viewCreation/view";
+import { Snapshot } from "./viewCreation/snapshot";
+import path from "path";
 
 export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
-  bungeeKeys: ISignerKeyPair
   instanceId: string;
   participant: string;
 
@@ -50,7 +48,6 @@ export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
   fabricSigningCredential?: FabricSigningCredential;
   fabricChannelName?: string;
   fabricContractName?: string;
-  // fabricPlugin?: PluginLedgerConnectorFabric;
   fabricAssetID?: string;
   fabricAssetSize?: string;
   fabricConfig?: Configuration;
@@ -65,9 +62,7 @@ export interface IPluginBUNGEEOptions extends ICactusPluginOptions{
 }
 
 export class PluginBUNGEE {
-  // private readonly ledgerConnector: any;
   private bungeeSigner: JsObjectSigner;
-  // private keyPairBungee: Secp256k1Keys;
   private privKeyBungee: string;
   private pubKeyBungee: string;
   private tI: string;
@@ -76,7 +71,6 @@ export class PluginBUNGEE {
   private participant;
 
   private ledgerAssetsKey: string[];
-  // private ledgerSnapShots: Map<string, Snapshot>; //Key, snapshot
   private ledgerStates: Map<string, State>; //Key, state
   private states: State[];
   
@@ -94,12 +88,18 @@ export class PluginBUNGEE {
   public pluginRegistry: PluginRegistry;
 
   constructor(public readonly options: IPluginBUNGEEOptions) {
-    // this.keyPairBungee = options.bungeeKeys;
-    const keyPairBungee = options.bungeeKeys? options.bungeeKeys: Secp256k1Keys.generateKeyPairsBuffer();
-  
-    this.pubKeyBungee = Utils.bufArray2HexStr(keyPairBungee.publicKey);
-    this.privKeyBungee = Utils.bufArray2HexStr(keyPairBungee.privateKey);
+    this.className = "pluginBUNGEE";
+    this.level = options.logLevel || "INFO";
+    const label = this.getClassName();
+    const level = this.level;
+    this.logger = LoggerProvider.getOrCreate({ label, level });
     
+    const keysRelPath ="../keys/";
+    const pubKeyPath = path.join(__dirname, keysRelPath, "./id_rsa_pub.pem");
+    const privKeyPath = path.join(__dirname, keysRelPath, "./id_rsa_priv.pem");
+    this.pubKeyBungee = Utils.readKeyFromFile(pubKeyPath);
+    this.privKeyBungee = Utils.readKeyFromFile(privKeyPath);
+      
     const bungeeSignerOptions: IJsObjectSignerOptions = {
       privateKey: this.privKeyBungee,
       logLevel: "debug",
@@ -108,27 +108,15 @@ export class PluginBUNGEE {
 
     this.instanceId = uuidv4();
     this.participant = options.participant;
-
-    this.className = "pluginBUNGEE";
-    this.level = options.logLevel || "INFO";
-    const label = this.getClassName();
-    const level = this.level;
-    this.logger = LoggerProvider.getOrCreate({ label, level });
-
-    this.privKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.privateKey);
-    this.pubKeyBungee = Utils.bufArray2HexStr(options.bungeeKeys.publicKey);
-
+        
     this.ledgerAssetsKey = [];
-    // this.txForKey = new Map<string, Transaction[]>();
-    // this.txEndorsement = new Map<string, Endorsement[]>();
-    // this.ledgerSnapShots = new Map<string, Snapshot>();
     this.ledgerStates = new Map<string, State>();
     this.states = [];
     this.tI = "";
     this.tF = "";
+
     this.pluginRegistry = new PluginRegistry();
     this.fabricApi = options.fabricApi;
-
 
     if (options.fabricPath != undefined) this.defineFabricConnection(options);
   }
@@ -149,302 +137,6 @@ export class PluginBUNGEE {
     return;
   }
 
-  sign(msg: string): Uint8Array {
-    return this.bungeeSigner.sign(msg);
-  }
-
-  public async generateLedgerStates(): Promise<string> {
-    this.logger.info(`Generating ledger snapshot`);
-    
-    const assetsKey = await this.getAllAssetsKey();
-    this.ledgerAssetsKey = assetsKey.split(",");//Car1 Car2
-    
-    //For each key in ledgerAssetsKey
-    for(const assetKey of this.ledgerAssetsKey){
-      // eslint-disable-next-line prefer-const
-      // let txEndorsement = new Map<string, Endorsement[]>();
-      // eslint-disable-next-line prefer-const
-      let assetValues: string[] = [];
-      // eslint-disable-next-line prefer-const
-      let txWithTimeS: Transaction[] = [];
-
-      this.logger.info(assetKey);
-      const txs = await this.getAllTxByKey(assetKey);
-
-      // this.txForKey.set(assetKey, txs); 
-      
-      //For each tx get receipt
-      for(const tx of txs){
-        const endorsements: Proof[] = [];
-        const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
-        // Checks if tx was made by participant
-        if(receipt.transactionCreator.mspid != this.participant){
-          continue;
-        }
-        
-        assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
-        //Save endorsements of tx
-        for (const endorsement of  receipt.transactionEndorsement) {
-          endorsements.push(new Proof(endorsement.mspid, endorsement.endorserID, endorsement.signature));
-        }
-        tx.defineTxProofs(endorsements);
-        txWithTimeS.push(tx);
-        // txEndorsement.set(tx.getId(), endorsements);
-      }
-      
-      // this.ledgerSnapShots.set(assetKey, new Snapshot(assetKey, assetValues, txWithTimeS));
-      const state = new State(assetKey, assetValues, txWithTimeS);
-      this.ledgerStates.set(assetKey, state);//Might delete
-      this.states.push(state);
-
-    }
-    
-    this.logger.info(` --------------- STATES ---------------`);
-    this.ledgerStates.forEach((state: State, keyId: string) => {
-      console.log(keyId, state);
-      const assetState = this.ledgerStates.get(keyId);
-      if(assetState != undefined) {
-        this.logger.info(assetState);
-        this.logger.info(JSON.parse(assetState.getStateJson()));
-        
-      }
-    }); 
-
-    // TESTS ONLY
-    
-    const car2 = this.ledgerStates.get("CAR2");
-
-    if (car2 != undefined) {
-      this.tI = car2.getTimeForTxN(2);
-      this.tF = car2.getTimeForTxN(1);
-
-    }
-
-    this.logger.info(` --------------- END STATES ---------------`);
-
-    return "";   
-  }
-
-  public generateSnapshot(): Snapshot {
-    const snapShotId = uuidv4();
-    const snapshot = new Snapshot(snapShotId, this.participant, this.states);
-    this.logger.info(` --------------- SNAPSHOT ---------------`);
-    this.logger.info(snapshot.getSnapShotJson());
-    return snapshot;
-  }
-
-  public generateView(snapshot: Snapshot): string {
-    const view = new View(this.tI, this.tF, snapshot);
-    const signature = Utils.bufArray2HexStr(this.sign(view.getViewStr()));
-    const signedView = {View: view, Signature: signature};
-    this.saveViews(JSON.stringify(signedView, null, 2));
-    return JSON.stringify(signedView);
-  }
-  // public generateView(ti: string, tf: string, snapshots: Snapshot[]): string{
-  // public generateView(): string{
-  //   this.logger.info(`<><><><>GENERATEVIEW()<><><><>`);
-  //   const car1 = this.ledgerSnapShots.get("CAR1");
-  //   const car2 = this.ledgerSnapShots.get("CAR2");
-  //   const car3 = this.ledgerSnapShots.get("CAR3");
-
-  //   if(car1 != undefined && car2 != undefined && car3 != undefined) {
-  //     const tI = car2.getTimeForTxN(2); 
-  //     const tF = car2.getTimeForTxN(1); 
-  //     this.logger.info(`TEMPO INICIAL = ${tI}`);
-  //     this.logger.info(`TEMPO FINAL = ${tF}`);
-  
-  //     this.logger.info(`car1 time`);
-  //     this.logger.info(car1.getInitialTime());
-  //     this.logger.info(car1.getTimeForTxN(1));
-  //     this.logger.info(car1.getFinalTime());
-  
-  //     this.logger.info(`car2 time`);
-  //     this.logger.info(car2.getInitialTime());
-  //     this.logger.info(car2.getTimeForTxN(1));
-  //     this.logger.info(car2.getFinalTime());
-      
-  //     this.logger.info(`car3time`);
-  //     this.logger.info(car3.getInitialTime());
-  //     this.logger.info(car3.getFinalTime());
-  
-  //     car1.pruneSnapShot(tI, tF);
-  //     car2.pruneSnapShot(tI, tF);
-  //     car3.pruneSnapShot(tI, tF);
-
-  //     this.logger.info(JSON.parse(car1.getSnapshotJson()));
-  //     const signature1 = Utils.bufArray2HexStr(this.sign(car1.getSnapshotJson()));
-  //     this.logger.info(`SIGNATURE1: ${signature1}`);
-  //     this.logger.info({Snapshot: car1.getSnapshotJson(), Signature: signature1});
-
-  //     this.logger.info(JSON.parse(car2.getSnapshotJson()));
-  //     const signature2 = Utils.bufArray2HexStr(this.sign(car2.getSnapshotJson()));
-  //     this.logger.info(`SIGNATURE2: ${signature2}`);
-  //     this.logger.info({Snapshot: car2.getSnapshotJson(), Signature: signature2});
-
-  //     this.logger.info(JSON.parse(car3.getSnapshotJson()));
-  //     const signature3 = Utils.bufArray2HexStr(this.sign(car3.getSnapshotJson()));
-  //     this.logger.info(`SIGNATURE3: ${signature3}`);
-  //     this.logger.info(signature3);
-
-  //     this.logger.info({Snapshot: car3.getSnapshotJson(), Signature: signature3});
-      
-  //   }
-
-  //   return "";
-  // }
-
-
-  //Connect to fabric, retrive blocks
-  async getBlocks(): Promise<string> {
-
-    // this.ledgerConnector.getTransactionReceiptByTxID();
-    // this.fabricApi?.deployContractGoSourceV1
-    this.logger.info(`Called getBlocks()`);
-    // const fnTag = `${this.className}#lockFabricAsset()`;
-
-    // let fabricLockAssetProof = "";
-     
-    // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: ${fabricLockAssetProof}`);
-    // // this.logger.info(`${fnTag} ${txId}, proof of the asset lock: `);
-    
-    this.logger.info(`-------------------------------------BEGIN TX------------------------------------`);
-    const keysString = await this.getAllAssetsKey();
-    const keys = keysString.split(",");
-    this.logger.info(keys.toString());
-    // eslint-disable-next-line prefer-const
-    let transactionsRawByKey: string[] = [];
-    
-    for (const key of keys) {
-      const allTxByKey = await this.getAllTxByKeyString(key);
-      transactionsRawByKey.push(allTxByKey);
-      this.logger.info(allTxByKey);
-    }
-
-    this.logger.info(`transactionsRawByKey -> ${transactionsRawByKey}`);
-    
-    for (const txsByKey of transactionsRawByKey) {
-      this.logger.info(`txsByKey -> ${txsByKey}`);
-    
-      for(const tx of JSON.parse(txsByKey)) {
-        tx.timestamp;
-        this.logger.info("--- Estou a passar esta transacao ---");
-        this.logger.info(tx);
-
-
-        this.logger.info("--- Passing to RECEIPT begin ---");
-        this.logger.info(tx.value.txId);
-        this.logger.info("--- Passing to RECEIPT end ---");
-
-        //GET transaction receipt
-        const receipt = await this.fabricGetTxReceiptByTxIDV1(tx.value.txId);
-        
-        this.logger.info("--- RECEIPT begin ---");
-        // const txEndorsement = JSON.parse(receipt).transactionEndorsement;
-        this.logger.info(receipt);
-        this.logger.info("--- RECEIPT end ---");
-        // const snapshot = new Snapshot();
-        // this.snapShots.set(tx.value.txId, );
-      }
-
-    }
-
-    
-    // this.logger.info(allTx); 
-    this.logger.info(`--------------------------------------END--------------------------------------`);
-    // fabricLockAssetProof = await this.fabricGetTxReceiptByTxIDV1(txId);
-
-    // this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
-    
-    return "";
-    // return fabricLockAssetProof;
-  }
-
-  
-  async fabricGetTxReceiptByTxIDV1(transactionId: string): Promise<string> {
-    const receiptLockRes = await this.fabricApi?.getTransactionReceiptByTxIDV1(
-      {
-        signingCredential: this.fabricSigningCredential,
-        channelName: this.fabricChannelName,
-        contractName: "qscc",
-        invocationType: FabricContractInvocationType.Call,
-        methodName: "GetBlockByTxID",
-        // params: [this.fabricChannelName, this.fabricAssetID],
-        params: [this.fabricChannelName, transactionId],
-      } as FabricRunTransactionRequest,
-    );
-
-    return JSON.stringify(receiptLockRes?.data);
-  }
-  
-
-  async getAllAssetsKey(): Promise<string> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "GetAllAssetsKey",
-      invocationType: FabricContractInvocationType.Call,
-      params: [],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      return response.data.functionOutput;
-    }
-
-    return "response undefined";
-  }
-
-  async getAllTxByKey(key: string): Promise<Transaction[]> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "GetAllTxByKey",
-      invocationType: FabricContractInvocationType.Call,
-      params: [key],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      
-      return Utils.txsStringToTxs(response.data.functionOutput);
-    }
-
-    return [];
-  }
-
-  async getAllTxByKeyString(key: string): Promise<string> {
-
-    const response = await this.fabricApi?.runTransactionV1({
-      signingCredential: this.fabricSigningCredential,
-      channelName: this.fabricChannelName,
-      contractName: this.fabricContractName,
-      methodName: "GetAllTxByKey",
-      invocationType: FabricContractInvocationType.Call,
-      params: [key],
-    } as FabricRunTransactionRequest);
-
-    if (response != undefined){
-      
-      return response.data.functionOutput;
-    }
-
-    return "";
-  }
-
-  //Must be atomic
-  public saveViews(viewStr: string): void {
-    const fs = require("fs");
-    
-    fs.writeFileSync("./viewFile.json", viewStr, function (err: boolean) {
-      if (err) {
-        return console.log("error");
-      }
-    });
-    this.logger.info(`Called saveViews()`);
-  }
-  
   private defineFabricConnection(options: IPluginBUNGEEOptions): void {
     
     this.logger.info(`OPTIONS:: ${options}`);
@@ -472,38 +164,225 @@ export class PluginBUNGEE {
       : "1";
   }
 
-  // async lockFabricAsset(): Promise<string> {
-  //   const fnTag = `${this.className}#lockFabricAsset()`;
+  
+  /**
+   * 
+   * @abstract Create ledger state. Get all keys, iterate every key and get the respective transactions. For each transaction get the receipt
+   * */
+  public async generateLedgerStates(): Promise<string> {
+    this.logger.info(`Generating ledger snapshot`);
+    
+    const assetsKey = await this.getAllAssetsKey();
+    this.ledgerAssetsKey = assetsKey.split(",");
+    
+    //For each key in ledgerAssetsKey
+    for(const assetKey of this.ledgerAssetsKey){
+      let assetValues: string[] = [];
+      let txWithTimeS: Transaction[] = [];
 
-  //   let fabricLockAssetProof = "";
+      this.logger.info(assetKey);
+      const txs = await this.getAllTxByKey(assetKey);
 
-  //   if (this.fabricApi != undefined) {
-  //     const response = await this.fabricApi.runTransactionV1({
-  //       signingCredential: this.fabricSigningCredential,
-  //       channelName: this.fabricChannelName,
-  //       contractName: this.fabricContractName,
-  //       invocationType: FabricContractInvocationType.Send,
-  //       methodName: "LockAsset",
-  //       params: [this.fabricAssetID],
-  //     } as FabricRunTransactionRequest);
+      //For each tx get receipt
+      for(const tx of txs){
+        const endorsements: Proof[] = [];
+        const receipt = JSON.parse(await this.fabricGetTxReceiptByTxIDV1(tx.getId()));
 
-  //     const receiptLockRes = await this.fabricApi.getTransactionReceiptByTxIDV1(
-  //       {
-  //         signingCredential: this.fabricSigningCredential,
-  //         channelName: this.fabricChannelName,
-  //         contractName: "qscc",
-  //         invocationType: FabricContractInvocationType.Call,
-  //         methodName: "GetBlockByTxID",
-  //         params: [this.fabricChannelName, response.data.transactionId],
-  //       } as FabricRunTransactionRequest,
-  //     );
+        // Checks if tx was made by participant
+        if(receipt.transactionCreator.mspid != this.participant){
+          continue;
+        }
+        
+        assetValues.push(JSON.parse(receipt.rwsetWriteData).Value.toString());
 
-  //     this.logger.warn(receiptLockRes.data);
-  //     fabricLockAssetProof = JSON.stringify(receiptLockRes.data);
-  //   }
+        //Save endorsements of tx
+        for (const endorsement of  receipt.transactionEndorsement) {
+          const signature64 = Buffer.from(endorsement.signature).toString('base64');
+          endorsements.push(new Proof(endorsement.mspid, endorsement.endorserID, signature64));
+        }
+        tx.defineTxProofs(endorsements);
+        txWithTimeS.push(tx);
+      }
+      
+      const state = new State(assetKey, assetValues, txWithTimeS);
+      this.ledgerStates.set(assetKey, state);
+      this.states.push(state);
+    }
+    
+    this.ledgerStates.forEach((state: State, keyId: string) => {
+      console.log(keyId, state);
+      const assetState = this.ledgerStates.get(keyId);
+      if(assetState != undefined) {
+        this.logger.info(assetState);
+        this.logger.info(JSON.parse(assetState.getStateJson()));
+        
+      }
+    }); 
 
-  //   this.logger.info(`${fnTag}, proof of the asset lock: ${fabricLockAssetProof}`);
+    // TESTS ONLY -> next receive ti tf
+    const car2 = this.ledgerStates.get("CAR2");
 
-  //   return fabricLockAssetProof;
-  // }
+    if (car2 != undefined) {
+      this.tI = car2.getTimeForTxN(2);
+      this.tF = car2.getTimeForTxN(1);
+    }
+
+    return "";   
+  }
+
+
+  /**
+   * 
+   * @abstract Returns Snapshot
+   * */
+  public generateSnapshot(): Snapshot {
+    const snapShotId = uuidv4();
+    const snapshot = new Snapshot(snapShotId, this.participant, this.states);
+    return snapshot;
+  }
+
+
+  /**
+   * 
+   * @abstract Returns view. Generate final view with signature
+   * 
+   * @param snapshot - Ledger Snapshot
+   * */
+  public generateView(snapshot: Snapshot): string {
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256');
+
+    this.logger.warn(this.pubKeyBungee);
+    this.logger.warn(this.privKeyBungee);
+    const view = new View(this.tI, this.tF, snapshot);
+    
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.write(view.getViewStr());
+    signer.end();
+    const signature = signer.sign(this.privKeyBungee, 'base64');
+
+    this.saveToFile(__dirname + "/../../view/signed.json", view.getViewStr());
+
+    const signedView = {View: view, Signature: signature, Hash: hash.update(view.getViewStr()).digest('hex')};
+
+    this.saveToFile(__dirname + "/../../view/viewFile.json", JSON.stringify(signedView, null, 2));
+
+    return JSON.stringify(signedView);
+  }
+
+
+  /**
+   * 
+   * @abstract Returns transaction receipt.
+   * 
+   * @param transactionId - Transaction id to return the receipt
+   * */
+  async fabricGetTxReceiptByTxIDV1(transactionId: string): Promise<string> {
+    const receiptLockRes = await this.fabricApi?.getTransactionReceiptByTxIDV1(
+      {
+        signingCredential: this.fabricSigningCredential,
+        channelName: this.fabricChannelName,
+        contractName: "qscc",
+        invocationType: FabricContractInvocationType.Call,
+        methodName: "GetBlockByTxID",
+        params: [this.fabricChannelName, transactionId],
+      } as FabricRunTransactionRequest,
+    );
+
+    return JSON.stringify(receiptLockRes?.data);
+  }
+
+
+  /**
+   * 
+   * @abstract Returns all assets key found in the world state.
+   * */
+  async getAllAssetsKey(): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllAssetsKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      return response.data.functionOutput;
+    }
+
+    return "response undefined";
+  }
+
+
+  /**
+   * 
+   * @abstract Returns an array of all transactions for a specific key.
+   *
+   * @param key - Key used to get correspondent transactions
+   * */
+  async getAllTxByKey(key: string): Promise<Transaction[]> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllTxByKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [key],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      
+      return Utils.txsStringToTxs(response.data.functionOutput);
+    }
+
+    return [];
+  }
+
+
+  /**
+   * 
+   * @abstract Returns all the transactions for a specific key in string format.
+   *
+   * @param key - Key (id) used to get correspondent transactions
+   * */
+  async getAllTxByKeyString(key: string): Promise<string> {
+
+    const response = await this.fabricApi?.runTransactionV1({
+      signingCredential: this.fabricSigningCredential,
+      channelName: this.fabricChannelName,
+      contractName: this.fabricContractName,
+      methodName: "GetAllTxByKey",
+      invocationType: FabricContractInvocationType.Call,
+      params: [key],
+    } as FabricRunTransactionRequest);
+
+    if (response != undefined){
+      
+      return response.data.functionOutput;
+    }
+
+    return "";
+  }
+  
+
+  /**
+   * 
+   * @abstract Save view in json file.
+   *
+   * @param fileName - File name or path + file name
+   * @param data - View in a string format to write inside the json file
+   * */
+  public saveToFile(fileName: string, data: string): void {
+    const fs = require("fs");
+    
+    fs.writeFileSync(fileName, data, function (err: boolean) {
+      if (err) {
+        return console.log("error");
+      }
+    });
+  }
 }
+
