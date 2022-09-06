@@ -20,7 +20,7 @@ export class View {
     const viewStr = {
       tI: this.tI,
       tF: this.tF,
-      snapshot: this.snapshot.getSnapshotJson(),
+      snapshot: this.snapshot,
     };
     return JSON.stringify(viewStr);
     // return this.snapshot.getSnapshotJson();

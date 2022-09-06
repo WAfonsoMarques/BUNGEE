@@ -95,8 +95,8 @@ export class PluginBUNGEE {
     this.logger = LoggerProvider.getOrCreate({ label, level });
     
     const keysRelPath ="../keys/";
-    const pubKeyPath = path.join(__dirname, keysRelPath, "./id_rsa_pub.pem");
-    const privKeyPath = path.join(__dirname, keysRelPath, "./id_rsa_priv.pem");
+    const pubKeyPath = path.join(__dirname, keysRelPath, "./bungee_pub.pem");
+    const privKeyPath = path.join(__dirname, keysRelPath, "./bungee_priv.pem");
     this.pubKeyBungee = Utils.readKeyFromFile(pubKeyPath);
     this.privKeyBungee = Utils.readKeyFromFile(privKeyPath);
       
@@ -250,20 +250,22 @@ export class PluginBUNGEE {
    * */
   public generateView(snapshot: Snapshot): string {
     const crypto = require('crypto');
-    const hash = crypto.createHash('sha256');
 
     this.logger.warn(this.pubKeyBungee);
     this.logger.warn(this.privKeyBungee);
     const view = new View(this.tI, this.tF, snapshot);
     
-    const signer = crypto.createSign('RSA-SHA256');
-    signer.write(view.getViewStr());
+    const signer = crypto.createSign('SHA256');
+    signer.write(JSON.stringify(view));
     signer.end();
+
+    this.logger.warn(view.getViewStr());
+
     const signature = signer.sign(this.privKeyBungee, 'base64');
 
-    this.saveToFile(__dirname + "/../../view/signed.json", view.getViewStr());
+    this.saveToFile(__dirname + "/../../view/signed.json", JSON.stringify(view));
 
-    const signedView = {View: view, Signature: signature, Hash: hash.update(view.getViewStr()).digest('hex')};
+    const signedView = {View: view, Signature: signature};
 
     this.saveToFile(__dirname + "/../../view/viewFile.json", JSON.stringify(signedView, null, 2));
 

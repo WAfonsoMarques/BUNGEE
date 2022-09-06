@@ -14,7 +14,6 @@ import {
   IListenOptions,
   LoggerProvider,
   LogLevelDesc,
-  Secp256k1Keys,
   Servers,
 } from "@hyperledger/cactus-common";
 import { Configuration } from "@hyperledger/cactus-core-api";
@@ -331,6 +330,21 @@ beforeAll(async () => {
     // CAR3 -> 100 Keep
     // CAR2 -> 40 <---Tf Keep
     // CAR2 -> 60 > Remove
+
+    // CAN BE USED FOR TESTING
+    // for (let asset = 0; asset < 10; asset++) {
+    //   const assetName = "ASSET" + asset;
+    //   for (let state = 0; state < 20; state++) {
+    //     await apiClient.runTransactionV1({
+    //       contractName: fabricContractName,
+    //       channelName: fabricChannelName,
+    //       params: [assetName, state.toString()],
+    //       methodName: "CreateAsset",
+    //       invocationType: FabricContractInvocationType.Send,
+    //       signingCredential: fabricSigningCredential,
+    //     });
+    //   }
+    // }
 
     const createResponse = await apiClient.runTransactionV1({
       contractName: fabricContractName,
