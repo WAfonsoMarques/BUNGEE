@@ -13,7 +13,9 @@ export class View {
   }
 
   private pruneSnapshot(): void {
-    this.snapshot.pruneStates(this.tI, this.tF);
+    if (this.tI != "0" && this.tF != "0") {
+      this.snapshot.pruneStates(this.tI, this.tF);
+    }
   }
 
   public getViewStr(): string {

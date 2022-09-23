@@ -43,14 +43,14 @@ export class State {
 
   public getInitialTime(): string {
     if (this.transactions.length >= 1) {
-      return this.transactions[0].getTimeStamp();
+      return this.transactions[this.transactions.length - 1].getTimeStamp();
     }
     return "";
   }
 
   public getFinalTime(): string {
     if (this.transactions.length >= 1) {
-      return this.transactions[this.transactions.length - 1].getTimeStamp();
+      return this.transactions[0].getTimeStamp();
     }
     return "";
   }

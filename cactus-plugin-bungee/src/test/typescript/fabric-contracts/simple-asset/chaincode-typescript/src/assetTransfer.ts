@@ -51,6 +51,26 @@ export class AssetTransferContract extends Contract {
       console.info(`Asset ${asset.ID} initialized`);
     }
   }
+
+  @Transaction()
+  public async InitLedgerV2(ctx: Context): Promise<void> {
+    const assets: Asset[] = [];
+    for (let asset = 0; asset < 10; asset++) {
+      const assetName = "ASSET" + asset;
+      for (let state = 0; state < 10; state++) {
+        assets.push({
+          ID: assetName,
+          Value: state,
+        });
+      }
+    }
+
+    for (const asset of assets) {
+      asset.docType = "asset";
+      await ctx.stub.putState(asset.ID, Buffer.from(JSON.stringify(asset)));
+      console.info(`Asset ${asset.ID} initialized`);
+    }
+  }
   // AssetExists returns true when asset with given ID exists in world state.
   @Transaction(false)
   @Returns("boolean")
