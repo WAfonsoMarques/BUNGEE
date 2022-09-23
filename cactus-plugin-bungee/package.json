@@ -27,9 +27,9 @@
       "url": "https://github.com/WAfonsoMarques"
     },
     {
-      "name": "Peter Somogyvari",
-      "email": "peter.somogyvari@accenture.com",
-      "url": "https://accenture.com"
+      "name": "Rafael Belchior",
+      "email": "rafael.belchior@tecnico.ulisboa.pt",
+      "url": "https://rafaelapb.github.io/"
     }
   ],
   "main": "dist/lib/main/typescript/index.js",
